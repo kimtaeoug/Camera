@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
@@ -13,17 +14,18 @@ import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.bumptech.glide.Glide
 import com.gun0912.tedpermission.PermissionListener
 import com.gun0912.tedpermission.TedPermission
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.lang.Exception
 import java.text.SimpleDateFormat
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
+    var Gallery_code:Int = 101
 
     //val이 상수, var는 변수
     //1.카메라 사진 촬영 요청코드 정의
@@ -46,6 +48,9 @@ class MainActivity : AppCompatActivity() {
 
         btn_camera.setOnClickListener {
             takeCapture()
+        }
+        gallerybutton.setOnClickListener {
+            getImage()
         }
     }
 
@@ -130,8 +135,21 @@ class MainActivity : AppCompatActivity() {
                 )
                 bitmap = ImageDecoder.decodeBitmap(decode)
                 iv_profile.setImageBitmap(bitmap)
+
             }
             savePhoto(bitmap)
+        }
+        //갤러리에서 선택한 이미지 iv_profile에 넣기
+        if(requestCode==Gallery_code && resultCode == Activity.RESULT_OK){
+            data?.data?.let {it->
+                val seltectedBitmap :Bitmap
+                val imagePath = getRealPathFromURI(it)
+                println("=================================================")
+                println("path is ${imagePath}")
+                val selectedFile = File(imagePath)
+                seltectedBitmap = MediaStore.Images.Media.getBitmap(contentResolver, Uri.fromFile(selectedFile))
+                Glide.with(iv_profile.context).load(seltectedBitmap).into(iv_profile)
+            }
         }
 
 
@@ -140,7 +158,7 @@ class MainActivity : AppCompatActivity() {
     //갤러리에 사진 저장하는 함수
     private fun savePhoto(bitmap: Bitmap) {
         //사진 폴더에 저장하기 위한 경로 선언
-        val folderPath = Environment.getExternalStorageDirectory().absolutePath + "/Pictures/"
+        val folderPath = Environment.getExternalStorageDirectory().absolutePath + "/DCIM/Camera/"
 
         val timestamp: String = SimpleDateFormat("yyyyMMdd-HHmmss").format(Date())
         val filename = "${timestamp}.jpeg"
@@ -156,5 +174,32 @@ class MainActivity : AppCompatActivity() {
         //bitmap으로 압축
         bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
         Toast.makeText(this, "사진이 앨범에 저장되었습니다",Toast.LENGTH_LONG).show()
+        println("=================================================================================")
+        println("folder path is ${folder.toString()}")
+        //사진이 저장된 후, 갤러리에는 않보임 ->이미지스캐닝을 해줘야됨.
+        val sendIntent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+        sendIntent.setData(Uri.fromFile(folder))
+        sendBroadcast(sendIntent)
     }
+    //갤러리에 있는 사진 갖고 오기
+    private fun getImage(){
+        var intent = Intent(Intent.ACTION_PICK)
+        intent.data = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        intent.type = "image/*"
+        startActivityForResult(intent,Gallery_code)
+    }
+    //이미지 실제 경로 갖고 오기
+    private fun getRealPathFromURI(uri: Uri): String {
+        var columnIndex = 0
+        val proj = arrayOf(MediaStore.Images.Media.DATA)
+        val cursor = contentResolver.query(uri, proj, null, null, null)!!
+        if (cursor.moveToFirst()) {
+            columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+        }
+        return cursor.getString(columnIndex)
+    }
+
 }
+//camera -/storage/emulated/0/DCIM/Camera/20200501_203329.jpg
+//picture - /storage/emulated/0/Capture+/Capture+_2020-07-01-19-01-59.png
+//folder path - /storage/emulated/0/Pictures
